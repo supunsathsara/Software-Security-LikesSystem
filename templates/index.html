@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+</head>
+<body>
+    <h1>{{ title }}</h1>
+    {% if likes %}
+        <p>You like {{
+            ', '.join(likes)
+                }}</p>
+    {% endif %}
+    <form method="POST" action="/">
+        <legend>What do you like?
+        </legend>
+        <ul>
+            <li><input name="likes"></li>
+        </ul>
+        <input type="submit" value="Submit">
+    </form>
+    <hr>
+    <form method="POST" action="/forget">
+        <input type="submit" value="Forget Me">
+    </form>
+</body>
+</html>
