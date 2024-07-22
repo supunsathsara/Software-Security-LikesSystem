@@ -1,18 +1,17 @@
-from flask import Flask, request, render_template, redirect, url_for, make_response, flash
+from flask import Flask, request, render_template, redirect, url_for, make_response, flash, session
 import sqlite3
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
+import os
 
 app = Flask(__name__)
-app.secret_key = 'NIBM123'
+app.secret_key = 'NIBM123' 
 COOKIE_NAME = 'session_id'
-
 
 def get_db():
     db = sqlite3.connect('data.db')
     db.row_factory = sqlite3.Row
     return db
-
 
 def create_tables(db):
     cursor = db.cursor()
@@ -33,7 +32,6 @@ def create_tables(db):
     )""")
     db.commit()
 
-
 def new_session(db, username):
     key = str(uuid.uuid4())
     cursor = db.cursor()
@@ -42,7 +40,6 @@ def new_session(db, username):
     response = make_response(redirect(url_for('index')))
     response.set_cookie(COOKIE_NAME, key)
     return key, response
-
 
 def get_session(db):
     key = request.cookies.get(COOKIE_NAME)
@@ -55,12 +52,10 @@ def get_session(db):
         return None, None
     return row['username'], None
 
-
 def store_like(db, username, like):
     cursor = db.cursor()
     cursor.execute("INSERT INTO likes (thing, username) VALUES (?, ?)", (like, username))
     db.commit()
-
 
 def get_likes(db, username):
     cursor = db.cursor()
@@ -68,22 +63,19 @@ def get_likes(db, username):
     result = [row['thing'] for row in cursor.fetchall()]
     return result
 
-
 def forget_me(db, key):
     cursor = db.cursor()
     cursor.execute("DELETE FROM sessions WHERE key=?", (key,))
+    cursor.execute("DELETE FROM likes WHERE key=?", (key,))
     db.commit()
-
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     db = get_db()
-    create_tables(db)
-    key = request.cookies.get(COOKIE_NAME)
     username, response = get_session(db)
     if username is None:
         return redirect(url_for('login'))
-
+    
     if request.method == 'POST':
         like = request.form.get('likes')
         if like:
@@ -93,15 +85,19 @@ def index():
     likes = get_likes(db, username)
     if response:
         response = make_response(render_template('index.html', title='Like System', likes=likes))
-        response.set_cookie(COOKIE_NAME, key)
+        response.set_cookie(COOKIE_NAME, username)
         return response
     return render_template('index.html', title='Like System', likes=likes)
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     db = get_db()
     if request.method == 'POST':
+        csrf_token = request.form['csrf_token']
+        if csrf_token != session.get('csrf_token'):
+            flash('Invalid CSRF token')
+            return redirect(url_for('login'))
+        
         username = request.form['username']
         password = request.form['password']
         cursor = db.cursor()
@@ -112,8 +108,9 @@ def login():
             return response if response else redirect(url_for('index'))
         else:
             flash('Invalid username or password')
-    return render_template('login.html')
-
+    
+    session['csrf_token'] = str(uuid.uuid4())
+    return render_template('login.html', csrf_token=session['csrf_token'])
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -127,7 +124,6 @@ def register():
         return redirect(url_for('login'))
     return render_template('register.html')
 
-
 @app.route('/logout', methods=['POST'])
 def logout():
     db = get_db()
@@ -140,7 +136,6 @@ def logout():
     response.delete_cookie(COOKIE_NAME)
     return response
 
-
 @app.route('/forget', methods=['POST'])
 def forget():
     db = get_db()
@@ -150,7 +145,6 @@ def forget():
     response = make_response(redirect(url_for('index')))
     response.delete_cookie(COOKIE_NAME)
     return response
-
 
 if __name__ == '__main__':
     db = get_db()
