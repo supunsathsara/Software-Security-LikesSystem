@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, make_response, session, flash
+from flask import Flask, request, render_template, redirect, url_for, make_response, flash
 import sqlite3
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -19,7 +19,7 @@ def create_tables(db):
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS likes (
         thing TEXT,
-        key TEXT
+        username TEXT
     )""")
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sessions (
@@ -39,7 +39,7 @@ def new_session(db, username):
     cursor = db.cursor()
     cursor.execute("INSERT INTO sessions (key, username) VALUES (?, ?)", (key, username))
     db.commit()
-    response = make_response()
+    response = make_response(redirect(url_for('index')))
     response.set_cookie(COOKIE_NAME, key)
     return key, response
 
@@ -56,15 +56,15 @@ def get_session(db):
     return row['username'], None
 
 
-def store_like(db, key, like):
+def store_like(db, username, like):
     cursor = db.cursor()
-    cursor.execute("INSERT INTO likes (thing, key) VALUES (?, ?)", (like, key))
+    cursor.execute("INSERT INTO likes (thing, username) VALUES (?, ?)", (like, username))
     db.commit()
 
 
-def get_likes(db, key):
+def get_likes(db, username):
     cursor = db.cursor()
-    cursor.execute("SELECT thing FROM likes WHERE key=?", (key,))
+    cursor.execute("SELECT thing FROM likes WHERE username=?", (username,))
     result = [row['thing'] for row in cursor.fetchall()]
     return result
 
@@ -72,7 +72,6 @@ def get_likes(db, key):
 def forget_me(db, key):
     cursor = db.cursor()
     cursor.execute("DELETE FROM sessions WHERE key=?", (key,))
-    cursor.execute("DELETE FROM likes WHERE key=?", (key,))
     db.commit()
 
 
@@ -88,10 +87,10 @@ def index():
     if request.method == 'POST':
         like = request.form.get('likes')
         if like:
-            store_like(db, key, like)
+            store_like(db, username, like)
         return redirect(url_for('index'))
 
-    likes = get_likes(db, key)
+    likes = get_likes(db, username)
     if response:
         response = make_response(render_template('index.html', title='Like System', likes=likes))
         response.set_cookie(COOKIE_NAME, key)
@@ -127,6 +126,19 @@ def register():
         db.commit()
         return redirect(url_for('login'))
     return render_template('register.html')
+
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    db = get_db()
+    key = request.cookies.get(COOKIE_NAME)
+    if key:
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM sessions WHERE key=?", (key,))
+        db.commit()
+    response = make_response(redirect(url_for('login')))
+    response.delete_cookie(COOKIE_NAME)
+    return response
 
 
 @app.route('/forget', methods=['POST'])
